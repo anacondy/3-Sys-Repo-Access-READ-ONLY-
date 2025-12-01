@@ -1,0 +1,797 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The Archives | Local Media Explorer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700;900&family=Lato:wght@300;400;700;900&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --moth-gold: #d4af37;
+            --moth-orange: #c46d1b;
+            --deep-red: #8a0b0b;
+            --off-white: #e8e8e8;
+            --void-black: #050505;
+            --panel-bg: rgba(20, 20, 20, 0.6);
+            --border-color: rgba(255, 255, 255, 0.1);
+        }
+
+        /* --- Global Reset & Scrollbar --- */
+        html, body {
+            background-color: var(--void-black);
+            color: var(--off-white);
+            font-family: 'Lato', sans-serif;
+            margin: 0;
+            padding: 0;
+            height: 100vh;
+            width: 100vw;
+            overflow: hidden; /* STRICT: No global scrollbars */
+            user-select: none;
+        }
+
+        /* Cinematic Font Classes */
+        .font-cinzel { font-family: 'Cinzel', serif; }
+        .font-lato { font-family: 'Lato', sans-serif; }
+
+        /* Custom Scrollbar - The ONLY one allowed */
+        ::-webkit-scrollbar { width: 10px; height: 10px; }
+        ::-webkit-scrollbar-track { background: var(--void-black); }
+        ::-webkit-scrollbar-thumb { background: var(--deep-red); border-radius: 5px; border: 1px solid var(--void-black); }
+        ::-webkit-scrollbar-thumb:hover { background: var(--moth-orange); }
+        
+        * {
+            scrollbar-width: thin;
+            scrollbar-color: var(--deep-red) var(--void-black);
+        }
+
+        /* --- Layout & Backgrounds --- */
+        #bg-canvas {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            z-index: 0; pointer-events: none; opacity: 0.4;
+        }
+
+        .vignette {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: radial-gradient(circle, transparent 50%, rgba(0,0,0,0.8) 100%);
+            z-index: 1; pointer-events: none;
+        }
+
+        .app-container {
+            position: relative; z-index: 10; width: 100%; height: 100%;
+            display: flex; flex-direction: column;
+            overflow: hidden;
+        }
+
+        /* --- Home Page (Landing) --- */
+        #page-home {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            background: radial-gradient(circle at center, rgba(138, 11, 11, 0.15) 0%, var(--void-black) 80%);
+            transition: opacity 0.8s ease, transform 0.8s ease;
+            z-index: 20;
+        }
+
+        @keyframes heartbeat {
+            0% { text-shadow: 0 0 10px rgba(138, 11, 11, 0.3); transform: scale(1); }
+            50% { text-shadow: 0 0 25px rgba(138, 11, 11, 0.6); transform: scale(1.01); }
+            100% { text-shadow: 0 0 10px rgba(138, 11, 11, 0.3); transform: scale(1); }
+        }
+
+        .title-glow { animation: heartbeat 4s infinite ease-in-out; color: var(--off-white); }
+
+        /* --- Explorer Page --- */
+        #page-explorer {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            display: flex; flex-direction: column;
+            opacity: 0; pointer-events: none;
+            transition: opacity 0.8s ease;
+            background: var(--void-black);
+            z-index: 20;
+        }
+
+        .explorer-header {
+            height: 80px;
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 0 2rem;
+            border-bottom: 1px solid var(--border-color);
+            background: rgba(5, 5, 5, 0.85);
+            backdrop-filter: blur(15px);
+            flex-shrink: 0;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.5);
+        }
+
+        .search-bar-wrapper { position: relative; width: 400px; }
+
+        .search-input {
+            width: 100%; background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--border-color);
+            padding: 0.75rem 1rem 0.75rem 3rem;
+            color: var(--off-white); font-family: 'Lato', sans-serif; font-size: 0.9rem;
+            border-radius: 4px; transition: all 0.3s;
+        }
+        
+        .search-input:focus {
+            outline: none; border-color: var(--moth-orange);
+            box-shadow: 0 0 15px rgba(196, 109, 27, 0.2); 
+            background: rgba(196, 109, 27, 0.05);
+        }
+        
+        .search-stats-overlay {
+            position: absolute; top: 50%; right: 1rem; transform: translateY(-50%);
+            font-size: 0.75rem; color: rgba(255, 255, 255, 0.3);
+            pointer-events: none; font-family: 'Cinzel', serif; letter-spacing: 0.1em;
+            transition: opacity 0.2s;
+        }
+
+        /* Main Content Area */
+        .file-grid-container {
+            flex: 1;
+            overflow-y: auto; /* RED SCROLLBAR HERE */
+            padding: 2rem;
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+            grid-auto-rows: min-content; 
+            gap: 1.5rem; align-content: start;
+            will-change: transform;
+        }
+
+        .file-list-container {
+            flex: 1;
+            overflow-y: auto; /* RED SCROLLBAR HERE */
+            display: none; flex-direction: column;
+        }
+
+        /* --- File Items (Grid) --- */
+        .file-card {
+            background: rgba(255,255,255,0.02);
+            border: 1px solid var(--border-color);
+            border-radius: 4px; overflow: hidden;
+            transition: all 0.2s cubic-bezier(0.25, 0.8, 0.25, 1);
+            cursor: pointer; position: relative;
+            aspect-ratio: 1 / 1; 
+            display: flex; flex-direction: column;
+            contain: content; 
+        }
+
+        .file-card:hover {
+            border-color: var(--moth-gold); transform: translateY(-4px);
+            box-shadow: 0 10px 25px rgba(0,0,0,0.7), 0 0 15px rgba(212, 175, 55, 0.1);
+            background: rgba(255,255,255,0.05); z-index: 5;
+        }
+
+        .file-preview-area {
+            flex: 1; position: relative; overflow: hidden;
+            background: #000; display: flex; align-items: center; justify-content: center;
+        }
+
+        .file-preview-img, .file-preview-video {
+            width: 100%; height: 100%; object-fit: cover; transition: transform 0.5s;
+        }
+        .file-card:hover .file-preview-img { transform: scale(1.05); }
+
+        .file-icon-placeholder {
+            width: 50%; height: 50%; opacity: 0.5; color: var(--moth-gold);
+            transition: color 0.3s, opacity 0.3s;
+        }
+        .file-card:hover .file-icon-placeholder {
+            color: var(--moth-orange); opacity: 0.8; filter: drop-shadow(0 0 8px var(--moth-orange));
+        }
+
+        .file-info {
+            padding: 0.75rem; background: rgba(0,0,0,0.8);
+            border-top: 1px solid rgba(255,255,255,0.05);
+            backdrop-filter: blur(5px); flex-shrink: 0;
+        }
+
+        .file-name {
+            font-size: 0.85rem; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--off-white);
+        }
+
+        .file-meta {
+            font-size: 0.7rem; color: #888; margin-top: 2px; display: flex; justify-content: space-between;
+        }
+        
+        .highlight-match {
+            color: var(--deep-red); font-weight: 900; text-shadow: 0 0 8px rgba(138, 11, 11, 1);
+        }
+
+        /* --- List View Styling --- */
+        .list-row {
+            display: grid; grid-template-columns: 50px 3fr 1fr 1fr;
+            padding: 0.75rem 2rem; border-bottom: 1px solid rgba(255,255,255,0.05);
+            align-items: center; transition: background 0.2s; cursor: pointer; contain: content;
+        }
+        .list-row:hover { background: rgba(212, 175, 55, 0.05); }
+        
+        .list-header { 
+            font-weight: 700; color: var(--moth-gold); text-transform: uppercase; 
+            font-size: 0.75rem; letter-spacing: 0.1em; 
+            background: rgba(0,0,0,0.95); position: sticky; top: 0; z-index: 5;
+            backdrop-filter: blur(10px); border-bottom: 1px solid var(--deep-red);
+        }
+        
+        .sort-btn { cursor: pointer; display: flex; align-items: center; gap: 5px; transition: color 0.2s; }
+        .sort-btn:hover { color: var(--moth-orange); }
+
+        /* --- Fullscreen Player / Preview --- */
+        #media-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(5, 5, 5, 0.98); z-index: 100;
+            display: flex; flex-direction: column;
+            opacity: 0; pointer-events: none; transition: opacity 0.3s ease;
+        }
+        #media-overlay.active { opacity: 1; pointer-events: auto; }
+
+        .player-stage {
+            flex: 1; display: flex; align-items: center; justify-content: center;
+            position: relative; overflow: hidden;
+        }
+        
+        .player-content {
+            max-width: 100%; max-height: 100%; box-shadow: 0 0 50px rgba(0,0,0,0.8);
+            position: relative; z-index: 2;
+        }
+
+        #audio-visualizer {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            width: 80%; height: 60%; z-index: 1; pointer-events: none; opacity: 0.8;
+        }
+
+        /* Custom Controls */
+        .controls-bar {
+            height: 130px; 
+            background: linear-gradient(0deg, rgba(0,0,0,1) 0%, rgba(0,0,0,0) 100%);
+            display: flex; flex-direction: column; justify-content: flex-end;
+            padding: 0 2rem 2.5rem 2rem;
+            width: 100%; position: absolute; bottom: 0; left: 0;
+            opacity: 0; transition: opacity 0.3s;
+            z-index: 50; /* HIGH Z-INDEX TO ENSURE VISIBILITY */
+        }
+
+        /* Force visibility on hover or active interaction */
+        .player-stage:hover .controls-bar, .controls-bar:hover { opacity: 1; }
+
+        /* Thick Timeline Styling (Fix: Visible Track) */
+        .timeline-wrapper {
+            width: 100%; 
+            height: 16px; /* Thickened */
+            background: rgba(255, 255, 255, 0.5); /* High Visibility Opacity */
+            border: 1px solid rgba(255,255,255,0.3); /* Subtle border definition */
+            border-radius: 8px; 
+            cursor: pointer; 
+            position: relative;
+            margin-bottom: 2rem;
+            transition: height 0.2s, background 0.2s, transform 0.2s;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.6);
+        }
+        .timeline-wrapper:hover { 
+            height: 20px; 
+            background: rgba(255,255,255,0.6); 
+            transform: scaleY(1.05);
+        }
+
+        .timeline-fill {
+            height: 100%; 
+            background: linear-gradient(90deg, var(--deep-red), var(--moth-orange));
+            width: 0%; 
+            position: absolute; top: 0; left: 0;
+            box-shadow: 0 0 15px var(--deep-red);
+            border-radius: 8px;
+        }
+        
+        .timeline-thumb {
+             width: 26px; height: 26px; /* High visibility Thumb */
+             background: #fff; border-radius: 50%;
+             position: absolute; top: 50%; transform: translate(50%, -50%); right: -13px;
+             box-shadow: 0 0 15px rgba(0,0,0,0.9);
+             opacity: 1; /* Always visible */
+             z-index: 20;
+             transition: transform 0.1s;
+        }
+        .timeline-wrapper:hover .timeline-thumb { transform: translate(50%, -50%) scale(1.15); }
+        .timeline-wrapper:active .timeline-thumb { transform: translate(50%, -50%) scale(1.3); }
+
+        .control-buttons { display: flex; align-items: center; justify-content: space-between; }
+
+        .btn-icon {
+            background: none; border: none; color: var(--off-white);
+            cursor: pointer; padding: 0.5rem; border-radius: 50%; transition: all 0.2s;
+        }
+        .btn-icon:hover { color: var(--moth-orange); background: rgba(255,255,255,0.05); text-shadow: 0 0 10px var(--moth-orange); }
+
+        /* Ghost Button */
+        .ghost-btn {
+            background: transparent; border: 1px solid rgba(255, 255, 255, 0.2);
+            color: var(--off-white); padding: 1rem 2rem; font-size: 1rem; font-weight: 700;
+            letter-spacing: 0.2em; text-transform: uppercase; cursor: pointer;
+            transition: all 0.3s; font-family: 'Cinzel', serif;
+            position: relative; overflow: hidden; backdrop-filter: blur(2px);
+        }
+        .ghost-btn::before {
+            content: ''; position: absolute; top: 0; left: -100%; width: 100%; height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent); transition: 0.5s;
+        }
+        .ghost-btn:hover {
+            border-color: var(--deep-red); color: var(--deep-red);
+            background: rgba(138, 11, 11, 0.05); box-shadow: 0 0 20px rgba(138, 11, 11, 0.4);
+        }
+        .ghost-btn:hover::before { left: 100%; }
+
+        .ghost-btn-secondary { border-color: rgba(212, 175, 55, 0.3); color: var(--moth-gold); }
+        .ghost-btn-secondary:hover {
+            border-color: var(--moth-orange); color: var(--moth-orange);
+            background: rgba(196, 109, 27, 0.05); box-shadow: 0 0 20px rgba(196, 109, 27, 0.4);
+        }
+        
+        #feedback-display {
+            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            font-family: 'Cinzel', serif; font-weight: 900; font-size: 4rem; color: var(--off-white);
+            text-shadow: 0 0 10px rgba(0,0,0,0.8), 0 0 30px var(--deep-red);
+            z-index: 200; opacity: 0; pointer-events: none;
+            transition: opacity 0.3s, transform 0.2s; letter-spacing: 0.2em;
+            text-transform: uppercase; text-align: center;
+        }
+        #feedback-display.active { opacity: 1; transform: translate(-50%, -50%) scale(1.1); }
+        
+        .text-deep-red { color: var(--deep-red) !important; filter: drop-shadow(0 0 5px var(--deep-red)); }
+        .icon { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+        /* --- REGISTRY MODAL (C+O+2) --- */
+        #registry-modal {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(5, 5, 5, 0.95); z-index: 300;
+            display: flex; align-items: center; justify-content: center;
+            opacity: 0; pointer-events: none; transition: opacity 0.5s ease;
+            backdrop-filter: blur(20px);
+        }
+        #registry-modal.active { opacity: 1; pointer-events: auto; }
+        
+        .registry-content {
+            border: 1px solid var(--moth-gold); padding: 3rem; max-width: 600px; width: 90%;
+            text-align: center; position: relative; box-shadow: 0 0 50px rgba(212, 175, 55, 0.1);
+            background: radial-gradient(circle at center, rgba(30,30,30,0.8), rgba(0,0,0,0.9));
+        }
+        .registry-title {
+            font-family: 'Cinzel', serif; font-size: 2rem; color: var(--off-white);
+            margin-bottom: 2rem; letter-spacing: 0.3em; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 1rem;
+        }
+        .author-name {
+            font-size: 3rem; font-weight: 900; color: var(--moth-gold);
+            animation: breathe 3s infinite ease-in-out; margin: 1rem 0; font-family: 'Cinzel', serif;
+        }
+        @keyframes breathe {
+            0%, 100% { opacity: 0.7; text-shadow: 0 0 10px var(--moth-gold); }
+            50% { opacity: 1; text-shadow: 0 0 30px var(--moth-orange); transform: scale(1.02); }
+        }
+        .registry-data { font-family: 'Lato', sans-serif; color: #888; font-size: 0.9rem; line-height: 1.6; margin-top: 2rem; }
+        .registry-close {
+            position: absolute; top: 1rem; right: 1rem; color: #666; cursor: pointer; transition: color 0.3s;
+        }
+        .registry-close:hover { color: var(--deep-red); }
+
+    </style>
+</head>
+<body>
+
+    <canvas id="bg-canvas"></canvas>
+    <div class="vignette"></div>
+    <div id="feedback-display">Volume 50%</div>
+
+    <!-- Registry Modal -->
+    <div id="registry-modal">
+        <div class="registry-content">
+            <button id="close-registry" class="registry-close"><svg class="icon" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>
+            <div class="registry-title">SYSTEM REGISTRY</div>
+            <div class="text-sm text-gray-500 uppercase tracking-widest mb-4">Architect</div>
+            <div class="author-name">ANACONDY</div>
+            <div class="registry-data">
+                <p class="mb-2"><span class="text-white">Version:</span> 3.2.0 (Redux)</p>
+                <p class="mb-4"><span class="text-white">Origin:</span> Generated via Neural Link Sessions / User Chats</p>
+                <div class="border-t border-gray-800 pt-4 mt-4 text-xs text-gray-600">FEATURES: SMART PDF VIEWER • ZERO LATENCY • AUDIO VISUALIZER • IMMERSIVE UI</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="app-container">
+        
+        <div id="page-home">
+            <h1 class="text-6xl md:text-8xl font-bold mb-4 tracking-widest text-white/90 font-cinzel text-center title-glow">THE ARCHIVES</h1>
+            <p class="text-xl text-white/40 mb-16 tracking-[0.6em] uppercase text-center font-lato">System Repository Access</p>
+            <div class="flex flex-col md:flex-row gap-6">
+                <button id="btn-open-repo" class="ghost-btn min-w-[240px]">Open Folder</button>
+                <button id="btn-select-files" class="ghost-btn ghost-btn-secondary min-w-[240px]">Select Files</button>
+            </div>
+            <p class="mt-8 text-xs text-white/20 tracking-widest uppercase animate-pulse">Awaiting Input...</p>
+            <input type="file" id="folder-picker-fallback" webkitdirectory directory multiple style="display:none">
+            <input type="file" id="file-picker-fallback" multiple style="display:none">
+        </div>
+
+        <div id="page-explorer">
+            <div class="explorer-header">
+                <div class="flex items-center gap-4">
+                    <div class="font-cinzel font-bold text-2xl text-white tracking-widest title-glow">ARCHIVES</div>
+                    <div class="text-xs text-gray-500 uppercase tracking-widest pt-1 border-l border-gray-700 pl-4 cursor-pointer hover:text-moth-gold transition-colors" id="btn-add-more-files" title="Click to Add More Files">SELECTED FILES <span class="text-deep-red">+</span></div>
+                </div>
+                <div class="search-bar-wrapper">
+                    <svg class="icon absolute left-3 top-3.5 text-gray-500" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                    <input type="text" id="search-input" class="search-input" placeholder="Search system...">
+                    <div id="search-stats" class="search-stats-overlay"></div>
+                </div>
+                <div class="flex gap-2">
+                    <button id="view-grid" class="btn-icon text-deep-red" title="Grid View"><svg class="icon" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg></button>
+                    <button id="view-list" class="btn-icon" title="List View"><svg class="icon" viewBox="0 0 24 24"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg></button>
+                    <button id="btn-close-session" class="btn-icon text-red-800 hover:text-red-500 ml-4" title="Close Session"><svg class="icon" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg></button>
+                </div>
+            </div>
+            <div id="files-grid" class="file-grid-container"></div>
+            <div id="files-list" class="file-list-container">
+                <div class="list-row list-header">
+                    <div>Type</div>
+                    <div class="sort-btn" data-sort="name">Name <span class="sort-icon"></span></div>
+                    <div class="sort-btn" data-sort="size">Size <span class="sort-icon"></span></div>
+                    <div class="sort-btn" data-sort="date">Date <span class="sort-icon"></span></div>
+                </div>
+                <div id="files-list-body"></div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- === MEDIA OVERLAY (PLAYER) === -->
+    <div id="media-overlay">
+        <button id="close-overlay" class="absolute top-6 right-8 z-50 btn-icon bg-black/50 hover:bg-red-900/50 p-3 rounded-full border border-white/10 hover:border-red-500 transition-all"><svg class="icon" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>
+        <div class="absolute top-6 left-8 z-50 text-white/70 font-cinzel tracking-widest text-lg pointer-events-none drop-shadow-lg" id="overlay-filename">FILENAME.MP4</div>
+        <div class="player-stage" id="player-stage">
+            <canvas id="audio-visualizer"></canvas>
+        </div>
+        <div class="controls-bar" id="video-controls">
+            <!-- Timeline (Fixed & Thick) -->
+            <div class="timeline-wrapper" id="timeline">
+                <div class="timeline-fill" id="timeline-fill">
+                    <div class="timeline-thumb"></div>
+                </div>
+            </div>
+            <div class="control-buttons">
+                <div class="flex items-center gap-4">
+                    <button id="btn-prev" class="btn-icon" title="Previous File (Left Arrow)"><svg class="icon" viewBox="0 0 24 24"><polygon points="19 20 9 12 19 4 19 20"></polygon><line x1="5" y1="19" x2="5" y2="5"></line></svg></button>
+                    <button id="btn-play" class="btn-icon p-3 bg-white/10 hover:bg-deep-red/80 rounded-full border border-white/10 hover:border-deep-red shadow-[0_0_15px_rgba(138,11,11,0.5)]" title="Play/Pause (Space)">
+                        <svg id="icon-play" class="icon" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                        <svg id="icon-pause" class="icon hidden" viewBox="0 0 24 24"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>
+                    </button>
+                    <button id="btn-next" class="btn-icon" title="Next File (Right Arrow)"><svg class="icon" viewBox="0 0 24 24"><polygon points="5 4 15 12 5 20 5 4"></polygon><line x1="19" y1="5" x2="19" y2="19"></line></svg></button>
+                    <div class="flex items-center gap-2 ml-4 group">
+                         <button id="btn-mute" class="btn-icon text-gray-400 group-hover:text-white" title="Mute (M)">
+                            <svg id="icon-vol" class="icon" viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
+                            <svg id="icon-mute" class="icon hidden" viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><line x1="23" y1="9" x2="17" y2="15"></line><line x1="17" y1="9" x2="23" y2="15"></line></svg>
+                         </button>
+                         <div class="w-24 h-1 bg-gray-600 rounded cursor-pointer relative group-hover:h-1.5 transition-all" id="vol-slider">
+                             <div class="h-full bg-moth-gold w-3/4 absolute top-0 left-0 pointer-events-none shadow-[0_0_8px_#d4af37]" id="vol-fill"></div>
+                         </div>
+                    </div>
+                    <span class="text-xs text-gray-400 font-mono ml-4" id="time-display">00:00 / 00:00</span>
+                </div>
+                <div class="flex items-center gap-4">
+                    <button id="btn-pip" class="btn-icon" title="Picture in Picture"><svg class="icon" viewBox="0 0 24 24"><rect x="2" y="10" width="20" height="11" rx="2" ry="2"></rect><path d="M12 15h10v6H12z"></path></svg></button>
+                    <button id="btn-fullscreen" class="btn-icon" title="Fullscreen"><svg class="icon" viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path></svg></button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const STATE = {
+            allFiles: [], filteredFiles: [], renderedCount: 0, batchSize: 50,
+            currentView: 'grid', playingIndex: -1, videoElement: null,
+            filterText: '', sort: { column: 'name', direction: 1 }, totalSize: 0,
+            audioCtx: null, analyser: null, visualizerReq: null,
+            keysPressed: { c: false, o: false, 2: false }, registryTimer: null
+        };
+
+        const pageHome = document.getElementById('page-home');
+        const pageExplorer = document.getElementById('page-explorer');
+        const filesGrid = document.getElementById('files-grid');
+        const filesListBody = document.getElementById('files-list-body');
+        const filesListContainer = document.getElementById('files-list');
+        const searchInput = document.getElementById('search-input');
+        const searchStats = document.getElementById('search-stats');
+        const mediaOverlay = document.getElementById('media-overlay');
+        const playerStage = document.getElementById('player-stage');
+        const videoControls = document.getElementById('video-controls');
+        const feedbackDisplay = document.getElementById('feedback-display');
+        const viewGridBtn = document.getElementById('view-grid');
+        const viewListBtn = document.getElementById('view-list');
+        const audioVisCanvas = document.getElementById('audio-visualizer');
+        const visCtx = audioVisCanvas.getContext('2d');
+        const registryModal = document.getElementById('registry-modal');
+
+        // Canvas & Particles
+        const canvas = document.getElementById('bg-canvas');
+        const ctx = canvas.getContext('2d');
+        let particles = [];
+        
+        function resizeCanvas() { 
+            canvas.width = window.innerWidth; canvas.height = window.innerHeight; 
+            audioVisCanvas.width = playerStage.clientWidth || window.innerWidth;
+            audioVisCanvas.height = playerStage.clientHeight || window.innerHeight;
+        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        class Particle {
+            constructor() { this.init(); }
+            init() {
+                this.x = Math.random() * canvas.width; this.y = Math.random() * canvas.height;
+                this.size = Math.random() * 2.5; this.vx = (Math.random() - 0.5) * 0.5; this.vy = (Math.random() - 0.5) * 0.5;
+                this.alpha = Math.random() * 0.6; this.flashSpeed = Math.random() * 0.02; this.flashOffset = Math.random() * Math.PI * 2;
+                this.colorType = Math.random() > 0.8 ? 'red' : 'gold';
+            }
+            update(time) {
+                this.x += this.vx; this.y += this.vy;
+                this.x += Math.sin(time * 0.001 + this.y * 0.005) * 0.1;
+                if (this.x < 0) this.x = canvas.width; if (this.x > canvas.width) this.x = 0;
+                if (this.y < 0) this.y = canvas.height; if (this.y > canvas.height) this.y = 0;
+            }
+            draw(time) {
+                const pulse = (Math.sin(time * this.flashSpeed + this.flashOffset) + 1) / 2;
+                const activeAlpha = this.alpha * (0.5 + pulse * 0.5);
+                ctx.fillStyle = this.colorType === 'red' ? `rgba(138, 11, 11, ${activeAlpha})` : `rgba(212, 175, 55, ${activeAlpha})`;
+                ctx.beginPath(); ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2); ctx.fill();
+                if (pulse > 0.95) { ctx.shadowBlur = 10; ctx.shadowColor = this.colorType === 'red' ? '#8a0b0b' : '#d4af37'; ctx.fill(); ctx.shadowBlur = 0; }
+            }
+        }
+        for (let i = 0; i < 150; i++) particles.push(new Particle());
+        function animateBg(time) {
+            ctx.clearRect(0, 0, canvas.width, canvas.height); particles.forEach(p => { p.update(time); p.draw(time); }); requestAnimationFrame(animateBg);
+        }
+        requestAnimationFrame(animateBg);
+
+        // UI & Feedback
+        let feedbackTimeout;
+        function showFeedback(text) {
+            feedbackDisplay.innerText = text; feedbackDisplay.classList.add('active');
+            clearTimeout(feedbackTimeout); feedbackTimeout = setTimeout(() => feedbackDisplay.classList.remove('active'), 1000);
+        }
+
+        // File Loading
+        document.getElementById('btn-open-repo').addEventListener('click', async () => {
+            try {
+                const dirHandle = await window.showDirectoryPicker();
+                STATE.allFiles = []; STATE.totalSize = 0;
+                await processDirectory(dirHandle); switchToExplorer("Local Folder");
+            } catch (err) { if(err.name !== 'AbortError') document.getElementById('folder-picker-fallback').click(); }
+        });
+        document.getElementById('btn-select-files').addEventListener('click', () => triggerFileSelect(true));
+        document.getElementById('btn-add-more-files').addEventListener('click', () => triggerFileSelect(false));
+
+        async function triggerFileSelect(isNewSession) {
+             try {
+                if (window.showOpenFilePicker) {
+                    const handles = await window.showOpenFilePicker({ multiple: true });
+                    if(isNewSession) { STATE.allFiles = []; STATE.totalSize = 0; }
+                    await processFileHandles(handles); switchToExplorer("Selected Files");
+                } else { throw new Error("API not supported"); }
+            } catch (err) { if(err.name !== 'AbortError') document.getElementById('file-picker-fallback').click(); }
+        }
+
+        document.getElementById('folder-picker-fallback').addEventListener('change', (e) => {
+             STATE.allFiles = []; STATE.totalSize = 0;
+             if (e.target.files.length > 0) { processFallbackFiles(e.target.files); switchToExplorer("Local Folder"); }
+        });
+        document.getElementById('file-picker-fallback').addEventListener('change', (e) => {
+            if (e.target.files.length > 0) { processFallbackFiles(e.target.files); switchToExplorer("Selected Files"); }
+        });
+
+        async function processDirectory(dirHandle) {
+            for await (const entry of dirHandle.values()) { if (entry.kind === 'file') { STATE.allFiles.push(processFile(await entry.getFile())); STATE.totalSize += (await entry.getFile()).size; } } refreshView();
+        }
+        async function processFileHandles(handles) {
+            for (const handle of handles) { const f = await handle.getFile(); STATE.allFiles.push(processFile(f)); STATE.totalSize += f.size; } refreshView();
+        }
+        function processFallbackFiles(fileList) { Array.from(fileList).forEach(f => { STATE.allFiles.push(processFile(f)); STATE.totalSize += f.size; }); refreshView(); }
+
+        function processFile(file) {
+            const ext = file.name.split('.').pop().toLowerCase(); let type = 'unknown';
+            const cats = {
+                image: ['jpg','jpeg','png','gif','bmp','webp','svg','heif','heic','psd','tiff','tif'],
+                video: ['mp4','webm','mkv','mov','avi','m4v','flv','wmv','mpg','mpeg','3gp','ts'],
+                audio: ['mp3','wav','ogg','flac','m4a','aac','wma','aiff','alac'],
+                code: ['html','css','js','py','c','cpp','json','sql','java','ts','php','rb','swift','go'],
+                doc: ['pdf','txt','doc','docx','xls','xlsx','ppt','pptx','csv','epub','rtf','odt'],
+                archive: ['zip','rar','7z','tar','gz','bz2','xz'],
+                exec: ['exe','msi','app','bat','sh','dmg','apk'],
+                font: ['ttf','otf','woff','woff2','eot','fon'],
+                db: ['sql','db','mdb','accdb','sqlite','dbf'],
+                model: ['obj','fbx','stl','blend','dae','3ds','max']
+            };
+            for (const [key, exts] of Object.entries(cats)) { if (exts.includes(ext)) type = key; }
+            return {
+                id: Math.random().toString(36).substr(2, 9), file: file, name: file.name,
+                sizeBytes: file.size, size: formatSize(file.size), dateObj: new Date(file.lastModified),
+                date: new Date(file.lastModified).toLocaleDateString(), type: type, ext: ext
+            };
+        }
+
+        function switchToExplorer(folderName) {
+            pageHome.style.opacity = '0'; pageHome.style.pointerEvents = 'none';
+            setTimeout(() => { pageHome.style.display = 'none'; pageExplorer.style.opacity = '1'; pageExplorer.style.pointerEvents = 'auto'; }, 800);
+        }
+        document.getElementById('btn-close-session').addEventListener('click', () => {
+             pageExplorer.style.opacity = '0'; pageExplorer.style.pointerEvents = 'none';
+             STATE.allFiles = []; STATE.filteredFiles = []; STATE.totalSize = 0; filesGrid.innerHTML = ''; filesListBody.innerHTML = '';
+             setTimeout(() => { pageExplorer.style.display = 'none'; pageHome.style.display = 'flex'; requestAnimationFrame(() => { pageHome.style.opacity = '1'; pageHome.style.pointerEvents = 'auto'; }); }, 800);
+        });
+
+        // Lazy Loading
+        const observer = new IntersectionObserver((entries) => { if (entries[0].isIntersecting) renderBatch(); }, { rootMargin: '200px' });
+        const sentinel = document.createElement('div'); sentinel.style.height = '10px';
+
+        function refreshView() { filterFiles(); sortFiles(); filesGrid.innerHTML = ''; filesListBody.innerHTML = ''; STATE.renderedCount = 0; updateStats(); renderBatch(); }
+        function updateStats() { searchStats.style.display = searchInput.value.trim() === '' ? 'block' : 'none'; searchStats.innerText = `${formatSize(STATE.totalSize)} ; ${STATE.allFiles.length} ITEMS`; }
+
+        function renderBatch() {
+            const start = STATE.renderedCount; const end = Math.min(start + STATE.batchSize, STATE.filteredFiles.length);
+            if (start >= STATE.filteredFiles.length) return;
+            const batch = STATE.filteredFiles.slice(start, end); const fragmentGrid = document.createDocumentFragment(); const fragmentList = document.createDocumentFragment();
+            batch.forEach((f, i) => { fragmentGrid.appendChild(createGridItem(f, start + i)); fragmentList.appendChild(createListItem(f, start + i)); });
+            filesGrid.appendChild(fragmentGrid); filesListBody.appendChild(fragmentList); STATE.renderedCount = end;
+            const container = STATE.currentView === 'grid' ? filesGrid : filesListBody;
+            if (container.contains(sentinel)) container.removeChild(sentinel); container.appendChild(sentinel); observer.observe(sentinel);
+        }
+
+        function createGridItem(f, index) {
+            const card = document.createElement('div'); card.className = 'file-card'; card.onclick = () => openPreview(index, STATE.filteredFiles);
+            const nameHTML = highlightText(f.name, STATE.filterText);
+            let contentHTML = f.type === 'image' 
+                ? `<img src="${URL.createObjectURL(f.file)}" class="file-preview-img" loading="lazy" onerror="this.parentElement.innerHTML='<div class=\\'file-icon-placeholder flex items-center justify-center\\'>${getIconSvg('image').replace(/"/g, "'")}</div>'">` 
+                : (f.type === 'video' 
+                    ? `<video class="file-preview-video" muted loop playsinline oncontextmenu="return false;"><source src="${URL.createObjectURL(f.file)}" type="video/${f.ext === 'mkv' ? 'mp4' : f.ext}"></video><div class="absolute bottom-2 right-2 bg-black/80 text-white text-[10px] px-1 rounded border border-white/20">VID</div>` 
+                    : `<div class="file-icon-placeholder flex items-center justify-center">${getIconSvg(f.type)}</div>`);
+            card.innerHTML = `<div class="file-preview-area">${contentHTML}</div><div class="file-info"><div class="file-name" title="${f.name}">${nameHTML}</div><div class="file-meta"><span>${f.size}</span><span>${f.ext.toUpperCase()}</span></div></div>`;
+            if (f.type === 'video') { const vid = card.querySelector('video'); card.addEventListener('mouseenter', () => vid.play().catch(()=>{})); card.addEventListener('mouseleave', () => { vid.pause(); vid.currentTime = 0; }); }
+            return card;
+        }
+
+        function createListItem(f, index) {
+            const row = document.createElement('div'); row.className = 'list-row'; row.onclick = () => openPreview(index, STATE.filteredFiles);
+            row.innerHTML = `<div class="text-moth-gold">${getIconSvg(f.type, 16)}</div><div class="text-white/90 truncate font-lato">${highlightText(f.name, STATE.filterText)}</div><div class="text-gray-400 text-sm">${f.size}</div><div class="text-gray-500 text-sm">${f.date}</div>`;
+            return row;
+        }
+
+        function filterFiles() {
+            const query = STATE.filterText.trim(); if (!query) { STATE.filteredFiles = [...STATE.allFiles]; return; }
+            if (query.startsWith('.')) { STATE.filteredFiles = STATE.allFiles.filter(f => f.ext.includes(query.substring(1).toLowerCase())); return; }
+            const lower = query.toLowerCase();
+            if (['images', 'video', 'audio', 'doc', 'code', 'exec', 'archive'].includes(lower)) {
+                 STATE.filteredFiles = STATE.allFiles.filter(f => f.type.includes(lower.replace('images','image').replace('videos','video'))); return;
+            }
+            if (/^\d{4}$/.test(query)) { STATE.filteredFiles = STATE.allFiles.filter(f => f.date.includes(query)); return; }
+            if (/\d+\s+[a-zA-Z]+/.test(query)) { STATE.filteredFiles = STATE.allFiles.filter(f => f.dateObj.toDateString().toLowerCase().includes(lower)); return; }
+            const parts = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').split(/\s+/).join('[\\s\\._-]*');
+            const regex = new RegExp(parts, 'i'); STATE.filteredFiles = STATE.allFiles.filter(f => regex.test(f.name));
+        }
+
+        function sortFiles() {
+            const { column, direction } = STATE.sort;
+            STATE.filteredFiles.sort((a, b) => {
+                let valA, valB; if (column === 'name') { valA = a.name.toLowerCase(); valB = b.name.toLowerCase(); } else if (column === 'size') { valA = a.sizeBytes; valB = b.sizeBytes; } else { valA = a.dateObj; valB = b.dateObj; }
+                return valA < valB ? -1 * direction : (valA > valB ? 1 * direction : 0);
+            });
+        }
+
+        function highlightText(text, query) {
+            if (!query || query.startsWith('.')) return text;
+            const parts = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').split(/\s+/).join('[\\s\\._-]*');
+            return text.replace(new RegExp(`(${parts})`, 'gi'), '<span class="highlight-match">$1</span>');
+        }
+
+        let searchTimeout; searchInput.addEventListener('input', (e) => { clearTimeout(searchTimeout); STATE.filterText = e.target.value; searchTimeout = setTimeout(refreshView, 300); });
+        document.querySelectorAll('.sort-btn').forEach(btn => btn.addEventListener('click', () => { const col = btn.dataset.sort; if (STATE.sort.column === col) STATE.sort.direction *= -1; else { STATE.sort.column = col; STATE.sort.direction = 1; } refreshView(); }));
+        viewGridBtn.onclick = () => { STATE.currentView = 'grid'; filesGrid.style.display = 'grid'; filesListContainer.style.display = 'none'; viewGridBtn.classList.add('text-deep-red'); viewListBtn.classList.remove('text-deep-red'); if (filesListBody.contains(sentinel)) filesListBody.removeChild(sentinel); filesGrid.appendChild(sentinel); };
+        viewListBtn.onclick = () => { STATE.currentView = 'list'; filesGrid.style.display = 'none'; filesListContainer.style.display = 'flex'; viewListBtn.classList.add('text-deep-red'); viewGridBtn.classList.remove('text-deep-red'); if (filesGrid.contains(sentinel)) filesGrid.removeChild(sentinel); filesListBody.appendChild(sentinel); };
+
+        function initAudioContext() {
+            if (!STATE.audioCtx) { STATE.audioCtx = new (window.AudioContext || window.webkitAudioContext)(); STATE.analyser = STATE.audioCtx.createAnalyser(); STATE.analyser.fftSize = 256; STATE.analyser.smoothingTimeConstant = 0.85; }
+        }
+        function startVisualizer() {
+            if (!STATE.analyser) return; const bufLen = STATE.analyser.frequencyBinCount; const dataArray = new Uint8Array(bufLen);
+            function draw() {
+                STATE.visualizerReq = requestAnimationFrame(draw); STATE.analyser.getByteFrequencyData(dataArray); visCtx.clearRect(0, 0, audioVisCanvas.width, audioVisCanvas.height);
+                const bars = 45; const barWidth = (audioVisCanvas.width / bars) * 0.8; let x = (audioVisCanvas.width - (bars * (barWidth + 5))) / 2;
+                for (let i = 0; i < bars; i++) {
+                    const val = dataArray[i + 3]; const norm = val / 255; const h = Math.pow(norm, 1.5) * (audioVisCanvas.height * 0.8);
+                    const jitter = Math.random() * (val > 30 ? 15 : 0);
+                    visCtx.fillStyle = `rgba(138, 11, 11, ${norm + 0.2})`; visCtx.fillRect(x, (audioVisCanvas.height / 2) - ((h + jitter) / 2), barWidth, h + jitter);
+                    if (val > 10) { visCtx.fillStyle = '#ff4d4d'; visCtx.fillRect(x, (audioVisCanvas.height / 2) - 1, barWidth, 2); }
+                    x += barWidth + 5;
+                }
+            } draw();
+        }
+        function stopVisualizer() { if (STATE.visualizerReq) cancelAnimationFrame(STATE.visualizerReq); visCtx.clearRect(0, 0, audioVisCanvas.width, audioVisCanvas.height); }
+
+        function openPreview(index, contextArray) {
+            const f = contextArray[index]; STATE.playingIndex = index; document.getElementById('overlay-filename').innerText = f.name; playerStage.innerHTML = ''; playerStage.appendChild(audioVisCanvas); mediaOverlay.classList.add('active'); videoControls.style.opacity = '0'; stopVisualizer();
+            
+            if (f.type === 'video' || f.type === 'audio') {
+                videoControls.style.opacity = '1'; const isAudio = f.type === 'audio';
+                const el = document.createElement(isAudio ? 'audio' : 'video'); el.src = URL.createObjectURL(f.file);
+                el.className = isAudio ? 'w-1/2 h-24' : 'player-content'; if (!isAudio) el.style.maxHeight = '80vh';
+                el.controls = false; el.autoplay = true; el.oncontextmenu = e => { e.preventDefault(); return false; };
+                el.onclick = () => { if (el.paused) el.play(); else el.pause(); };
+                if(isAudio) { initAudioContext(); try { const src = STATE.audioCtx.createMediaElementSource(el); src.connect(STATE.analyser); STATE.analyser.connect(STATE.audioCtx.destination); } catch(e){} startVisualizer(); 
+                    const iconWrapper = document.createElement('div'); iconWrapper.className = "absolute text-moth-orange opacity-40 pointer-events-none z-10"; iconWrapper.innerHTML = `<svg class="icon" style="width:200px;height:200px;filter:drop-shadow(0 0 20px #8a0b0b)" viewBox="0 0 24 24"><path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle></svg>`; playerStage.appendChild(iconWrapper);
+                }
+                playerStage.appendChild(el); STATE.videoElement = el; setupVideoListeners(el);
+            } else if (f.type === 'image') {
+                const img = document.createElement('img'); img.src = URL.createObjectURL(f.file); img.className = 'player-content object-contain h-[80vh]'; img.onerror = () => playerStage.innerHTML = generateAssetCard(f, "Image Preview Unavailable"); playerStage.appendChild(img); STATE.videoElement = null;
+            } else if (f.ext === 'pdf') {
+                 // PDF Logic - Instant Iframe Loading
+                 const pdfFrame = document.createElement('iframe');
+                 pdfFrame.src = URL.createObjectURL(f.file);
+                 pdfFrame.className = "w-full h-full border-none";
+                 playerStage.appendChild(pdfFrame);
+                 STATE.videoElement = null; 
+            } else if (['code', 'doc'].includes(f.type) || ['txt','json','csv'].includes(f.ext)) {
+                 if (f.sizeBytes > 5 * 1024 * 1024) { playerStage.innerHTML = generateAssetCard(f, "File Too Large"); STATE.videoElement = null; } else {
+                     const reader = new FileReader(); reader.onload = (e) => { const pre = document.createElement('pre'); pre.className = 'p-8 bg-black/50 text-green-500 font-mono text-sm overflow-auto w-3/4 h-[80vh] border border-gray-800 rounded shadow-2xl z-20 relative'; pre.innerText = e.target.result.substring(0, 50000); playerStage.appendChild(pre); }; try { reader.readAsText(f.file); } catch(e){} STATE.videoElement = null;
+                 }
+            } else { playerStage.innerHTML = generateAssetCard(f, "Binary Asset"); STATE.videoElement = null; }
+        }
+        function generateAssetCard(f, msg) { return `<div class="relative z-20 bg-black/80 border border-moth-gold p-12 text-center rounded-lg shadow-[0_0_50px_rgba(212,175,55,0.1)]"><div class="text-moth-orange mb-6 flex justify-center">${getIconSvg(f.type, 64)}</div><h2 class="text-2xl font-cinzel text-white mb-2 tracking-widest">${f.name}</h2><p class="text-gray-400 font-lato mb-6">${f.size} • ${f.ext.toUpperCase()}</p><div class="text-xs text-red-500 border border-red-900/50 bg-red-900/10 px-4 py-2 rounded inline-block uppercase tracking-widest">${msg}</div></div>`; }
+        function closePreview() { mediaOverlay.classList.remove('active'); stopVisualizer(); if (STATE.videoElement) { STATE.videoElement.pause(); STATE.videoElement.src = ""; STATE.videoElement = null; } }
+        document.getElementById('close-overlay').onclick = closePreview;
+
+        function setupVideoListeners(media) {
+            const btnPlay = document.getElementById('btn-play'), timelineFill = document.getElementById('timeline-fill'), timeDisplay = document.getElementById('time-display'), timeline = document.getElementById('timeline');
+            btnPlay.onclick = () => { if (media.paused) media.play(); else media.pause(); };
+            media.addEventListener('play', () => { document.getElementById('icon-play').classList.add('hidden'); document.getElementById('icon-pause').classList.remove('hidden'); if(STATE.audioCtx && STATE.audioCtx.state === 'suspended') STATE.audioCtx.resume(); });
+            media.addEventListener('pause', () => { document.getElementById('icon-play').classList.remove('hidden'); document.getElementById('icon-pause').classList.add('hidden'); });
+            
+            media.addEventListener('timeupdate', () => {
+                const pct = (media.duration && media.duration > 0) ? (media.currentTime / media.duration) * 100 : 0;
+                timelineFill.style.width = pct + '%'; timeDisplay.innerText = formatTime(media.currentTime) + ' / ' + formatTime(media.duration);
+            });
+            let isDragging = false;
+            function seek(e) { const rect = timeline.getBoundingClientRect(); const pos = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width)); if(media.duration) media.currentTime = pos * media.duration; }
+            timeline.addEventListener('mousedown', (e) => { isDragging = true; seek(e); }); window.addEventListener('mousemove', (e) => { if (isDragging) seek(e); }); window.addEventListener('mouseup', () => isDragging = false); timeline.addEventListener('click', seek);
+
+            const volSlider = document.getElementById('vol-slider'), volFill = document.getElementById('vol-fill'); volFill.style.width = (media.volume * 100) + '%';
+            volSlider.onclick = (e) => { const rect = volSlider.getBoundingClientRect(); const vol = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width)); media.volume = vol; volFill.style.width = (vol * 100) + '%'; updateMuteIcon(); showFeedback(`VOLUME ${Math.round(vol * 100)}%`); };
+            document.getElementById('btn-mute').onclick = () => { media.muted = !media.muted; updateMuteIcon(); showFeedback(media.muted ? "MUTED" : "UNMUTED"); };
+            function updateMuteIcon() { 
+                const iconVol = document.getElementById('icon-vol'), iconMute = document.getElementById('icon-mute'); 
+                if (media.muted || media.volume === 0) { iconVol.classList.add('hidden'); iconMute.classList.remove('hidden'); } else { iconVol.classList.remove('hidden'); iconMute.classList.add('hidden'); } 
+            }
+            document.getElementById('btn-prev').onclick = () => { let idx = STATE.playingIndex - 1; if (idx >= 0) openPreview(idx, STATE.filteredFiles); };
+            document.getElementById('btn-next').onclick = () => { let idx = STATE.playingIndex + 1; if (idx < STATE.filteredFiles.length) openPreview(idx, STATE.filteredFiles); };
+            document.getElementById('btn-pip').onclick = async () => { if (document.pictureInPictureElement) await document.exitPictureInPicture(); else if (media.requestPictureInPicture) await media.requestPictureInPicture(); };
+            document.getElementById('btn-fullscreen').onclick = () => { if (!document.fullscreenElement) playerStage.requestFullscreen(); else document.exitFullscreen(); };
+        }
+
+        document.addEventListener('keydown', (e) => {
+            if ((e.ctrlKey || e.metaKey) && e.key === 'k') { e.preventDefault(); searchInput.focus(); return; }
+            if (e.key.toLowerCase() === 'c' || e.key.toLowerCase() === 'o' || e.key === '2') { STATE.keysPressed[e.key.toLowerCase()] = true; if(STATE.keysPressed.c && STATE.keysPressed.o && STATE.keysPressed['2'] && !STATE.registryTimer) STATE.registryTimer = setTimeout(() => registryModal.classList.add('active'), 2000); }
+            if (registryModal.classList.contains('active') && e.key === 'Escape') registryModal.classList.remove('active');
+            if (!mediaOverlay.classList.contains('active')) return;
+            if (e.key === 'ArrowRight' && !e.ctrlKey) document.getElementById('btn-next').click();
+            if (e.key === 'ArrowLeft' && !e.ctrlKey) document.getElementById('btn-prev').click();
+            if (STATE.videoElement) {
+                if (e.key === ' ' || e.code === 'Space') { e.preventDefault(); document.getElementById('btn-play').click(); }
+                if (e.key.toLowerCase() === 'm') document.getElementById('btn-mute').click();
+                if (e.key === 'ArrowUp') { e.preventDefault(); STATE.videoElement.volume = Math.min(1, STATE.videoElement.volume + 0.1); document.getElementById('vol-fill').style.width = (STATE.videoElement.volume * 100) + '%'; showFeedback(`VOLUME ${Math.round(STATE.videoElement.volume * 100)}%`); }
+                if (e.key === 'ArrowDown') { e.preventDefault(); STATE.videoElement.volume = Math.max(0, STATE.videoElement.volume - 0.1); document.getElementById('vol-fill').style.width = (STATE.videoElement.volume * 100) + '%'; showFeedback(`VOLUME ${Math.round(STATE.videoElement.volume * 100)}%`); }
+            }
+            if (e.key === 'Escape') closePreview();
+        });
+        document.addEventListener('keyup', (e) => { const k = e.key.toLowerCase(); if (STATE.keysPressed.hasOwnProperty(k)) { STATE.keysPressed[k] = false; clearTimeout(STATE.registryTimer); STATE.registryTimer = null; } });
+        document.getElementById('close-registry').onclick = () => registryModal.classList.remove('active');
+
+        function formatSize(b) { if(b===0)return'0 B'; const k=1024, s=['B','KB','MB','GB','TB'], i=Math.floor(Math.log(b)/Math.log(k)); return parseFloat((b/Math.pow(k,i)).toFixed(2))+' '+s[i]; }
+        function formatTime(s) { if(!s || isNaN(s)) return '00:00'; const m=Math.floor(s/60), sec=Math.floor(s%60); return `${m}:${sec<10?'0':''}${sec}`; }
+        function getIconSvg(t, s=24) {
+             const p = { image: '<rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline>', video: '<polygon points="23 7 16 12 23 17 23 7"></polygon><rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect>', audio: '<path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle>', code: '<polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline>', doc: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline>', archive: '<polyline points="21 8 21 21 3 21 3 8"></polyline><rect x="1" y="3" width="22" height="5"></rect><line x1="10" y1="12" x2="14" y2="12"></line>', exec: '<rect x="4" y="4" width="16" height="16" rx="2" ry="2"></rect><rect x="9" y="9" width="6" height="6"></rect><line x1="9" y1="1" x2="9" y2="4"></line><line x1="15" y1="1" x2="15" y2="4"></line>', font: '<path d="M4 20h16a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2z"></path><path d="M12 16l-4-8 4-8 4 8-4 8z"></path>', db: '<ellipse cx="12" cy="5" rx="9" ry="3"></ellipse><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"></path><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"></path>', model: '<path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line>', unknown: '<path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline>' };
+            return `<svg class="icon" style="width:${s}px;height:${s}px" viewBox="0 0 24 24">${p[t]||p.unknown}</svg>`;
+        }
+    </script>
+</body>
+</html>
