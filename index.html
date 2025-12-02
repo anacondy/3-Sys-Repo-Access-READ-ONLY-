@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -857,9 +857,12 @@
         
         // Reduce particles on mobile for better performance
         const particleCount = STATE.isMobile ? 75 : 150;
+        // Cap devicePixelRatio at 2x to balance visual quality vs performance
+        // Higher DPR causes excessive canvas size and GPU memory usage on 3x+ displays
+        const MAX_DPR_FOR_PERFORMANCE = 2;
         
         function resizeCanvas() { 
-            const dpr = Math.min(window.devicePixelRatio || 1, 2); // Cap at 2x for performance
+            const dpr = Math.min(window.devicePixelRatio || 1, MAX_DPR_FOR_PERFORMANCE);
             canvas.width = window.innerWidth * dpr; 
             canvas.height = window.innerHeight * dpr;
             canvas.style.width = window.innerWidth + 'px';
@@ -1163,12 +1166,12 @@
             window.addEventListener('mouseup', () => isDragging = false); 
             timeline.addEventListener('click', (e) => seek(e.clientX));
             
-            // Touch events for mobile
+            // Touch events for mobile - preventDefault needed to prevent scrolling during seek
+            // This is intentional for slider controls where dragging should not scroll the page
             timeline.addEventListener('touchstart', (e) => { 
-                e.preventDefault(); 
                 isDragging = true; 
                 seek(e.touches[0].clientX); 
-            }, { passive: false });
+            }, { passive: true });
             window.addEventListener('touchmove', (e) => { 
                 if (isDragging && e.touches.length > 0) seek(e.touches[0].clientX); 
             }, { passive: true });
@@ -1187,7 +1190,7 @@
             }
             
             volSlider.onclick = (e) => setVolume(e.clientX);
-            volSlider.addEventListener('touchstart', (e) => { e.preventDefault(); setVolume(e.touches[0].clientX); }, { passive: false });
+            volSlider.addEventListener('touchstart', (e) => setVolume(e.touches[0].clientX), { passive: true });
             
             document.getElementById('btn-mute').onclick = () => { media.muted = !media.muted; updateMuteIcon(); showFeedback(media.muted ? "MUTED" : "UNMUTED"); };
             function updateMuteIcon() { 
