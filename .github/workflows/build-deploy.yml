@@ -15,9 +15,24 @@ permissions:
   id-token: write
 
 jobs:
-  # Deploy to GitHub Pages
+  # Validate HTML files on PRs (basic check)
+  validate:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Validate HTML files exist
+        run: |
+          echo "Checking for required files..."
+          test -f index.html && echo "✓ index.html exists" || exit 1
+          test -f README.md && echo "✓ README.md exists" || exit 1
+          echo "All validations passed!"
+
+  # Deploy to GitHub Pages (only on push to main/master, not on PRs)
   deploy-pages:
     runs-on: ubuntu-latest
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
