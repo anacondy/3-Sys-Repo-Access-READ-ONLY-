@@ -2,7 +2,11 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#050505">
     <title>The Archives | Local Media Explorer</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700;900&family=Lato:wght@300;400;700;900&display=swap" rel="stylesheet">
@@ -15,6 +19,11 @@
             --void-black: #050505;
             --panel-bg: rgba(20, 20, 20, 0.6);
             --border-color: rgba(255, 255, 255, 0.1);
+            /* Safe area insets for mobile devices with notches */
+            --safe-area-inset-top: env(safe-area-inset-top, 0px);
+            --safe-area-inset-bottom: env(safe-area-inset-bottom, 0px);
+            --safe-area-inset-left: env(safe-area-inset-left, 0px);
+            --safe-area-inset-right: env(safe-area-inset-right, 0px);
         }
 
         /* --- Global Reset & Scrollbar --- */
@@ -25,9 +34,12 @@
             margin: 0;
             padding: 0;
             height: 100vh;
+            height: 100dvh; /* Dynamic viewport height for mobile browsers */
             width: 100vw;
             overflow: hidden; /* STRICT: No global scrollbars */
             user-select: none;
+            -webkit-tap-highlight-color: transparent; /* Remove tap highlight on mobile */
+            touch-action: manipulation; /* Prevent double-tap zoom */
         }
 
         /* Cinematic Font Classes */
@@ -369,6 +381,88 @@
             position: absolute; top: 1rem; right: 1rem; color: #666; cursor: pointer; transition: color 0.3s;
         }
         .registry-close:hover { color: var(--deep-red); }
+
+        /* === MOBILE RESPONSIVE STYLES === */
+        
+        /* Touch-friendly scrollbar for mobile */
+        @media (pointer: coarse) {
+            ::-webkit-scrollbar { width: 6px; height: 6px; }
+        }
+        
+        /* Base mobile styles (up to 768px) */
+        @media screen and (max-width: 768px) {
+            .explorer-header {
+                height: auto;
+                min-height: 60px;
+                flex-wrap: wrap;
+                padding: 0.75rem 1rem;
+                gap: 0.5rem;
+            }
+            
+            .search-bar-wrapper {
+                width: 100%;
+                margin-top: 0.5rem;
+            }
+            
+            .search-input {
+                font-size: 16px; /* Prevent iOS zoom on focus */
+            }
+            
+            .file-grid-container {
+                padding: 1rem;
+                gap: 1rem;
+                grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+            }
+            
+            .controls-bar {
+                height: 140px;
+                padding: 0 1rem 1.5rem 1rem;
+                padding-bottom: calc(1.5rem + var(--safe-area-inset-bottom));
+                opacity: 1 !important;
+            }
+            
+            .btn-icon {
+                padding: 0.75rem;
+                min-width: 44px;
+                min-height: 44px;
+            }
+            
+            #page-home h1 {
+                font-size: 2.5rem !important;
+            }
+            
+            .ghost-btn {
+                padding: 0.85rem 1.5rem;
+                font-size: 0.85rem;
+            }
+        }
+        
+        /* Extra small screens */
+        @media screen and (max-width: 480px) {
+            .file-grid-container {
+                grid-template-columns: repeat(2, 1fr);
+            }
+            
+            #page-home h1 {
+                font-size: 2rem !important;
+            }
+        }
+        
+        /* Touch device optimizations */
+        @media (hover: none) and (pointer: coarse) {
+            .file-card:hover {
+                transform: none;
+            }
+            
+            .file-card:active {
+                border-color: var(--moth-gold);
+                transform: scale(0.98);
+            }
+            
+            .controls-bar {
+                opacity: 1 !important;
+            }
+        }
 
     </style>
 </head>
